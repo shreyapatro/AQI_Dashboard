@@ -185,9 +185,10 @@ Built by **[Your Team Name]** for **India Innovates 2026**.
 
 | Name | Role | Institution |
 |------|------|-------------|
-| Member 1 | ML & Data Pipeline | Your College |
-| Member 2 | Frontend & Dashboard | Your College |
-| Member 3 | Backend & DevOps | Your College |
+| Asmet | ML & Data Pipeline | KIIT University |
+| Utsah | Frontend & Dashboard | KIIT University |
+| Krish | Backend & DevOps | KIIT University |
+| Shreya | PPT and Compilation | KIIT University |
 
 ---
 
