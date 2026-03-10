@@ -181,14 +181,14 @@ npm start
 
 ## 👥 Team
 
-Built by **[Your Team Name]** for **India Innovates 2026**.
+Built by **CodeX** for **India Innovates 2026**.
 
 | Name | Role | Institution |
 |------|------|-------------|
-| Asmet | ML & Data Pipeline | KIIT University |
+| Asmet |Backend & DevOps| KIIT University |
 | Utsah | Frontend & Dashboard | KIIT University |
-| Krish | Backend & DevOps | KIIT University |
-| Shreya | PPT and Compilation | KIIT University |
+| Krish | PPT and Compilation | KIIT University |
+| Shreya | ML & Data Pipeline| KIIT University |
 
 ---
 
