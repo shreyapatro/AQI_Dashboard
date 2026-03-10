@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AQI-Lens — Ward-Wise Air Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg: #060e14;
+    --surface: #0d1f2d;
+    --surface2: #122333;
+    --teal: #00c4a7;
+    --teal2: #00a896;
+    --mint: #02e8c4;
+    --orange: #f4813b;
+    --red: #e84545;
+    --yellow: #f2c94c;
+    --green: #27ae60;
+    --purple: #7c6fff;
+    --text: #e8f4f8;
+    --text2: #8ab4c4;
+    --text3: #4a7a90;
+    --border: #1a3a4a;
+    --card: #0f1e2a;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; min-height:100vh; overflow-x:hidden; }
+
+  /* SCANLINE overlay */
+  body::before { content:''; position:fixed; inset:0; background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,196,167,0.015) 2px,rgba(0,196,167,0.015) 4px); pointer-events:none; z-index:9999; }
+
+  /* HEADER */
+  header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:0 2rem; height:56px;
+    background:rgba(13,31,45,0.95); border-bottom:1px solid var(--border);
+    backdrop-filter:blur(10px); position:sticky; top:0; z-index:100;
+  }
+  .logo { display:flex; align-items:center; gap:0.6rem; }
+  .logo-icon { width:28px; height:28px; background:var(--teal); border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; }
+  .logo-text { font-family:'Syne',sans-serif; font-weight:800; font-size:1.1rem; letter-spacing:-0.02em; }
+  .logo-text span { color:var(--teal); }
+  .header-center { display:flex; gap:0.3rem; }
+  .tab { padding:0.35rem 1rem; border-radius:6px; font-size:0.8rem; font-weight:500; cursor:pointer; border:none; background:transparent; color:var(--text2); transition:all 0.2s; letter-spacing:0.02em; }
+  .tab.active { background:rgba(0,196,167,0.12); color:var(--teal); }
+  .tab:hover:not(.active) { background:rgba(255,255,255,0.05); color:var(--text); }
+  .header-right { display:flex; align-items:center; gap:1rem; }
+  .live-badge { display:flex; align-items:center; gap:0.4rem; font-family:'Space Mono',monospace; font-size:0.7rem; color:var(--teal); }
+  .live-dot { width:7px; height:7px; background:var(--teal); border-radius:50%; animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+  .city-selector { background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:0.3rem 0.8rem; border-radius:6px; font-size:0.8rem; font-family:'DM Sans',sans-serif; cursor:pointer; outline:none; }
+
+  /* LAYOUT */
+  .app { display:grid; grid-template-columns:260px 1fr 280px; grid-template-rows:auto 1fr; height:calc(100vh - 56px); }
+
+  /* LEFT PANEL */
+  .left-panel { background:var(--surface); border-right:1px solid var(--border); overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:0.8rem; }
+  .panel-label { font-family:'Space Mono',monospace; font-size:0.65rem; color:var(--text3); letter-spacing:0.1em; text-transform:uppercase; padding:0.2rem 0; }
+
+  .aqi-main { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1.2rem; position:relative; overflow:hidden; }
+  .aqi-main::before { content:''; position:absolute; top:-30px; right:-30px; width:100px; height:100px; background:radial-gradient(circle, rgba(0,196,167,0.15), transparent 70%); pointer-events:none; }
+  .aqi-city { font-size:0.75rem; color:var(--text2); margin-bottom:0.3rem; }
+  .aqi-number { font-family:'Syne',sans-serif; font-size:3.5rem; font-weight:800; line-height:1; }
+  .aqi-number.good { color:var(--green); }
+  .aqi-number.moderate { color:var(--yellow); }
+  .aqi-number.poor { color:var(--orange); }
+  .aqi-number.hazardous { color:var(--red); }
+  .aqi-label { font-size:0.8rem; font-weight:600; margin-top:0.2rem; }
+  .aqi-label.good { color:var(--green); }
+  .aqi-label.moderate { color:var(--yellow); }
+  .aqi-label.poor { color:var(--orange); }
+  .aqi-label.hazardous { color:var(--red); }
+  .aqi-meta { margin-top:0.8rem; display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+  .aqi-meta-item { background:rgba(255,255,255,0.03); border-radius:6px; padding:0.5rem; }
+  .aqi-meta-label { font-size:0.65rem; color:var(--text3); }
+  .aqi-meta-value { font-family:'Space Mono',monospace; font-size:0.85rem; color:var(--text); margin-top:0.15rem; }
+
+  .ward-list { display:flex; flex-direction:column; gap:0.3rem; }
+  .ward-item { display:flex; align-items:center; justify-content:space-between; padding:0.6rem 0.8rem; border-radius:8px; cursor:pointer; border:1px solid transparent; transition:all 0.2s; }
+  .ward-item:hover { background:rgba(255,255,255,0.04); border-color:var(--border); }
+  .ward-item.active { background:rgba(0,196,167,0.08); border-color:rgba(0,196,167,0.3); }
+  .ward-left { display:flex; align-items:center; gap:0.7rem; }
+  .ward-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .ward-name { font-size:0.82rem; font-weight:500; }
+  .ward-sub { font-size:0.68rem; color:var(--text3); }
+  .ward-aqi { font-family:'Space Mono',monospace; font-size:0.82rem; font-weight:700; }
+
+  /* MAP */
+  .map-area { position:relative; background:var(--bg); display:flex; flex-direction:column; }
+  .map-controls { display:flex; align-items:center; justify-content:space-between; padding:0.8rem 1.2rem; border-bottom:1px solid var(--border); flex-shrink:0; }
+  .map-controls-left { display:flex; gap:0.5rem; }
+  .ctrl-btn { padding:0.3rem 0.8rem; border-radius:6px; font-size:0.75rem; font-weight:500; border:1px solid var(--border); background:var(--surface); color:var(--text2); cursor:pointer; transition:all 0.2s; }
+  .ctrl-btn.active { border-color:var(--teal); color:var(--teal); background:rgba(0,196,167,0.08); }
+  .ctrl-btn:hover:not(.active) { border-color:var(--text3); color:var(--text); }
+  .map-time { font-family:'Space Mono',monospace; font-size:0.7rem; color:var(--text3); }
+
+  #wardMap { flex:1; position:relative; overflow:hidden; background:var(--bg); }
+  canvas#mapCanvas { position:absolute; inset:0; width:100%; height:100%; }
+
+  .map-legend { position:absolute; bottom:1rem; left:1rem; background:rgba(13,31,45,0.92); border:1px solid var(--border); border-radius:8px; padding:0.6rem 0.9rem; backdrop-filter:blur(8px); }
+  .legend-title { font-size:0.65rem; color:var(--text3); margin-bottom:0.4rem; letter-spacing:0.05em; }
+  .legend-items { display:flex; gap:0.6rem; }
+  .legend-item { display:flex; align-items:center; gap:0.3rem; font-size:0.65rem; color:var(--text2); }
+  .legend-dot { width:8px; height:8px; border-radius:2px; }
+
+  .tooltip { position:absolute; background:rgba(13,31,45,0.95); border:1px solid var(--teal); border-radius:8px; padding:0.7rem 1rem; pointer-events:none; font-size:0.8rem; min-width:140px; display:none; z-index:50; }
+  .tooltip.show { display:block; }
+  .tooltip-name { font-weight:600; margin-bottom:0.4rem; font-family:'Syne',sans-serif; }
+  .tooltip-row { display:flex; justify-content:space-between; gap:1.5rem; color:var(--text2); font-size:0.75rem; margin-top:0.2rem; }
+  .tooltip-val { color:var(--text); font-family:'Space Mono',monospace; }
+
+  /* RIGHT PANEL */
+  .right-panel { background:var(--surface); border-left:1px solid var(--border); overflow-y:auto; padding:1rem; display:flex; flex-direction:column; gap:1rem; }
+
+  .source-breakdown { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+  .section-title { font-family:'Syne',sans-serif; font-weight:700; font-size:0.85rem; margin-bottom:0.8rem; display:flex; align-items:center; gap:0.5rem; }
+  .section-title .badge { font-family:'Space Mono',monospace; font-size:0.6rem; background:rgba(0,196,167,0.15); color:var(--teal); padding:0.15rem 0.4rem; border-radius:4px; }
+
+  .source-bars { display:flex; flex-direction:column; gap:0.6rem; }
+  .source-bar-row { }
+  .source-bar-header { display:flex; justify-content:space-between; margin-bottom:0.25rem; font-size:0.75rem; }
+  .source-bar-name { color:var(--text2); }
+  .source-bar-pct { font-family:'Space Mono',monospace; color:var(--text); font-weight:700; }
+  .source-bar-track { height:6px; background:rgba(255,255,255,0.06); border-radius:3px; overflow:hidden; }
+  .source-bar-fill { height:100%; border-radius:3px; transition:width 1s cubic-bezier(0.4,0,0.2,1); }
+
+  .pollutants { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+  .pollutant-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.5rem; }
+  .pollutant-item { background:rgba(255,255,255,0.03); border-radius:8px; padding:0.6rem 0.7rem; border:1px solid var(--border); }
+  .pollutant-name { font-size:0.65rem; color:var(--text3); margin-bottom:0.15rem; }
+  .pollutant-value { font-family:'Space Mono',monospace; font-size:1.0rem; font-weight:700; }
+  .pollutant-unit { font-size:0.6rem; color:var(--text3); }
+  .pollutant-bar { height:3px; margin-top:0.4rem; background:rgba(255,255,255,0.06); border-radius:2px; overflow:hidden; }
+  .pollutant-bar-fill { height:100%; border-radius:2px; }
+
+  .alerts-box { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+  .alert-item { display:flex; gap:0.7rem; padding:0.6rem 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .alert-item:last-child { border-bottom:none; padding-bottom:0; }
+  .alert-icon { width:28px; height:28px; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+  .alert-icon.warn { background:rgba(244,129,59,0.15); }
+  .alert-icon.danger { background:rgba(232,69,69,0.15); }
+  .alert-icon.info { background:rgba(0,196,167,0.12); }
+  .alert-text { font-size:0.75rem; color:var(--text2); line-height:1.4; }
+  .alert-text strong { color:var(--text); font-weight:600; display:block; margin-bottom:0.1rem; font-size:0.78rem; }
+  .alert-time { font-family:'Space Mono',monospace; font-size:0.6rem; color:var(--text3); margin-top:0.2rem; }
+
+  .forecast-chart { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:1rem; }
+  .mini-chart { height:70px; display:flex; align-items:flex-end; gap:3px; margin-top:0.5rem; }
+  .mini-bar { flex:1; border-radius:3px 3px 0 0; min-height:4px; transition:all 0.6s; position:relative; cursor:pointer; }
+  .mini-bar:hover { opacity:0.8; }
+  .chart-labels { display:flex; gap:3px; margin-top:0.3rem; }
+  .chart-label { flex:1; font-family:'Space Mono',monospace; font-size:0.55rem; color:var(--text3); text-align:center; }
+
+  .policy-box { background:rgba(0,196,167,0.05); border:1px solid rgba(0,196,167,0.2); border-radius:10px; padding:1rem; }
+  .policy-item { display:flex; align-items:flex-start; gap:0.6rem; font-size:0.75rem; color:var(--text2); line-height:1.4; margin-bottom:0.5rem; }
+  .policy-item:last-child { margin-bottom:0; }
+  .policy-dot { width:6px; height:6px; background:var(--teal); border-radius:50%; margin-top:0.35rem; flex-shrink:0; }
+
+  /* Animations */
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .left-panel, .right-panel { animation:fadeIn 0.5s ease both; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🌬</div>
+    <div class="logo-text">AQI<span>-Lens</span></div>
+  </div>
+  <div class="header-center">
+    <button class="tab active" onclick="switchTab(this,'map')">Ward Map</button>
+    <button class="tab" onclick="switchTab(this,'admin')">Admin Portal</button>
+    <button class="tab" onclick="switchTab(this,'citizen')">Citizen View</button>
+  </div>
+  <div class="header-right">
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <select class="city-selector" onchange="changeCity(this.value)">
+      <option value="delhi">Delhi</option>
+      <option value="mumbai">Mumbai</option>
+      <option value="bangalore">Bengaluru</option>
+      <option value="kolkata">Kolkata</option>
+    </select>
+  </div>
+</header>
+
+<div class="app">
+  <!-- LEFT -->
+  <div class="left-panel">
+    <div class="panel-label">City Overview</div>
+    <div class="aqi-main">
+      <div class="aqi-city" id="cityName">Delhi NCR</div>
+      <div class="aqi-number poor" id="mainAqi">187</div>
+      <div class="aqi-label poor" id="mainLabel">Poor</div>
+      <div class="aqi-meta">
+        <div class="aqi-meta-item">
+          <div class="aqi-meta-label">PM2.5</div>
+          <div class="aqi-meta-value" id="pm25">98 µg</div>
+        </div>
+        <div class="aqi-meta-item">
+          <div class="aqi-meta-label">PM10</div>
+          <div class="aqi-meta-value" id="pm10">162 µg</div>
+        </div>
+        <div class="aqi-meta-item">
+          <div class="aqi-meta-label">Wind</div>
+          <div class="aqi-meta-value" id="wind">4.2 km/h</div>
+        </div>
+        <div class="aqi-meta-item">
+          <div class="aqi-meta-label">Humidity</div>
+          <div class="aqi-meta-value" id="humidity">68%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-label">Ward Index</div>
+    <div class="ward-list" id="wardList"></div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-area">
+    <div class="map-controls">
+      <div class="map-controls-left">
+        <button class="ctrl-btn active" onclick="setLayer(this,'aqi')">AQI Heat</button>
+        <button class="ctrl-btn" onclick="setLayer(this,'source')">Source</button>
+        <button class="ctrl-btn" onclick="setLayer(this,'forecast')">Forecast</button>
+      </div>
+      <div class="map-time" id="mapTime"></div>
+    </div>
+    <div id="wardMap">
+      <canvas id="mapCanvas"></canvas>
+      <div class="tooltip" id="tooltip">
+        <div class="tooltip-name" id="tt-name">Ward Name</div>
+        <div class="tooltip-row"><span>AQI</span><span class="tooltip-val" id="tt-aqi">—</span></div>
+        <div class="tooltip-row"><span>PM2.5</span><span class="tooltip-val" id="tt-pm25">—</span></div>
+        <div class="tooltip-row"><span>Source</span><span class="tooltip-val" id="tt-src">—</span></div>
+        <div class="tooltip-row"><span>Status</span><span class="tooltip-val" id="tt-status">—</span></div>
+      </div>
+      <div class="map-legend">
+        <div class="legend-title">AQI SCALE</div>
+        <div class="legend-items">
+          <div class="legend-item"><div class="legend-dot" style="background:#27ae60"></div>Good</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f2c94c"></div>Moderate</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#f4813b"></div>Poor</div>
+          <div class="legend-item"><div class="legend-dot" style="background:#e84545"></div>Hazardous</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-panel">
+    <div class="source-breakdown">
+      <div class="section-title">ML Source Attribution <span class="badge">LIVE</span></div>
+      <div class="source-bars" id="sourceBars"></div>
+    </div>
+
+    <div class="pollutants">
+      <div class="section-title">Pollutant Levels</div>
+      <div class="pollutant-grid" id="pollutantGrid"></div>
+    </div>
+
+    <div class="forecast-chart">
+      <div class="section-title">24h AQI Forecast</div>
+      <div class="mini-chart" id="forecastChart"></div>
+      <div class="chart-labels" id="chartLabels"></div>
+    </div>
+
+    <div class="alerts-box">
+      <div class="section-title">Active Alerts</div>
+      <div id="alertsList"></div>
+    </div>
+
+    <div class="policy-box">
+      <div class="section-title" style="color:var(--teal)">🏛️ Policy Recommendations</div>
+      <div id="policyList"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ─────────────────────────────────────────────────────────────────────
+const CITIES = {
+  delhi: {
+    name: "Delhi NCR",
+    aqi: 187, label: "Poor", cls: "poor",
+    pm25: "98 µg", pm10: "162 µg", wind: "4.2 km/h", humidity: "68%",
+    wards: [
+      { name:"Anand Vihar",     sub:"East Delhi",  aqi:312, cls:"hazardous", src:"Vehicular+Industrial" },
+      { name:"Rohini Sec-14",   sub:"North Delhi", aqi:248, cls:"hazardous", src:"Construction Dust" },
+      { name:"Okhla Phase-II",  sub:"South Delhi", aqi:195, cls:"poor",      src:"Industrial" },
+      { name:"Connaught Place", sub:"Central",     aqi:172, cls:"poor",      src:"Vehicular" },
+      { name:"Dwarka Sec-7",    sub:"West Delhi",  aqi:145, cls:"moderate",  src:"Vehicular" },
+      { name:"Lodhi Colony",    sub:"South Delhi", aqi: 88, cls:"moderate",  src:"Mixed" },
+      { name:"Vasant Vihar",    sub:"South Delhi", aqi: 62, cls:"good",      src:"Low" },
+      { name:"Saket",           sub:"South Delhi", aqi: 74, cls:"good",      src:"Low" },
+    ],
+    sources: [
+      { name:"Vehicular Exhaust", pct:38, color:"#f4813b" },
+      { name:"Construction Dust", pct:27, color:"#f2c94c" },
+      { name:"Industrial Emiss.", pct:21, color:"#e84545" },
+      { name:"Biomass Burning",   pct:10, color:"#7c6fff" },
+      { name:"Other",             pct: 4, color:"#4a7a90" },
+    ],
+    pollutants: [
+      { name:"PM2.5", val:"98",  unit:"µg/m³", pct:78, color:"#e84545" },
+      { name:"PM10",  val:"162", unit:"µg/m³", pct:65, color:"#f4813b" },
+      { name:"NO₂",   val:"87",  unit:"ppb",   pct:58, color:"#f2c94c" },
+      { name:"SO₂",   val:"24",  unit:"ppb",   pct:30, color:"#7c6fff" },
+      { name:"CO",    val:"1.8", unit:"ppm",   pct:36, color:"#00c4a7" },
+      { name:"O₃",    val:"42",  unit:"ppb",   pct:42, color:"#27ae60" },
+    ],
+    forecast: [210,230,260,290,310,295,265,230,200,185,170,162,155,148,145,142,150,162,175,190,210,225,240,255],
+    alerts: [
+      { type:"danger", icon:"🚨", title:"Hazard Alert — Anand Vihar", text:"AQI 312. Avoid all outdoor activity. Vulnerable groups stay indoors.", time:"2 mins ago" },
+      { type:"warn", icon:"⚠️", title:"Construction Activity Detected", text:"ML model flagged elevated PM10 near Rohini Sec-14. Source: site dust.", time:"18 mins ago" },
+      { type:"info", icon:"ℹ️", title:"Wind Pattern Shift", text:"Winds changing to NW at 6 km/h. Pollution dispersal expected by 18:00.", time:"42 mins ago" },
+    ],
+    policies: [
+      "Suspend construction activity in Anand Vihar & Rohini wards (GRAP Stage-III)",
+      "Issue odd-even vehicle advisory for East Delhi arterial roads",
+      "Activate water-sprinkling trucks along NH-24 corridor",
+      "Issue school closure advisory for wards with AQI > 300",
+    ]
+  },
+  mumbai: {
+    name: "Mumbai",
+    aqi: 112, label: "Moderate", cls: "moderate",
+    pm25: "54 µg", pm10: "88 µg", wind: "12.4 km/h", humidity: "82%",
+    wards: [
+      { name:"Chembur East",    sub:"East Mumbai",  aqi:178, cls:"poor",     src:"Industrial" },
+      { name:"Bhandup West",    sub:"East Mumbai",  aqi:145, cls:"moderate", src:"Industrial" },
+      { name:"Dharavi",         sub:"Central",      aqi:138, cls:"moderate", src:"Biomass+Industrial" },
+      { name:"Worli",           sub:"South Mumbai", aqi:102, cls:"moderate", src:"Vehicular" },
+      { name:"Bandra West",     sub:"West Mumbai",  aqi: 78, cls:"good",     src:"Vehicular" },
+      { name:"Juhu",            sub:"West Mumbai",  aqi: 65, cls:"good",     src:"Low" },
+      { name:"Nariman Point",   sub:"South Mumbai", aqi: 58, cls:"good",     src:"Low" },
+      { name:"Goregaon West",   sub:"West Mumbai",  aqi: 90, cls:"moderate", src:"Construction" },
+    ],
+    sources: [
+      { name:"Industrial Emiss.", pct:42, color:"#e84545" },
+      { name:"Vehicular Exhaust", pct:30, color:"#f4813b" },
+      { name:"Biomass Burning",   pct:14, color:"#7c6fff" },
+      { name:"Construction Dust", pct:10, color:"#f2c94c" },
+      { name:"Other",             pct: 4, color:"#4a7a90" },
+    ],
+    pollutants: [
+      { name:"PM2.5", val:"54",  unit:"µg/m³", pct:43, color:"#f4813b" },
+      { name:"PM10",  val:"88",  unit:"µg/m³", pct:35, color:"#f2c94c" },
+      { name:"NO₂",   val:"42",  unit:"ppb",   pct:28, color:"#f2c94c" },
+      { name:"SO₂",   val:"18",  unit:"ppb",   pct:22, color:"#7c6fff" },
+      { name:"CO",    val:"0.9", unit:"ppm",   pct:18, color:"#00c4a7" },
+      { name:"O₃",    val:"38",  unit:"ppb",   pct:38, color:"#27ae60" },
+    ],
+    forecast: [120,115,108,102,98,95,92,88,86,84,88,92,98,102,108,112,118,122,128,135,140,138,132,125],
+    alerts: [
+      { type:"warn", icon:"⚠️", title:"Industrial Spike — Chembur", text:"SO₂ elevated 40% above baseline. Likely source: Mahul industrial cluster.", time:"8 mins ago" },
+      { type:"info", icon:"ℹ️", title:"Sea Breeze Activated", text:"Coastal wind at 12 km/h improving dispersion. AQI expected to drop by 18:00.", time:"25 mins ago" },
+    ],
+    policies: [
+      "Issue advisory to Chembur industrial units to reduce emissions by 30%",
+      "Increase inspection frequency at Mahul MIDC cluster",
+      "Activate coastal wind monitoring stations",
+    ]
+  },
+  bangalore: {
+    name: "Bengaluru",
+    aqi: 78, label: "Moderate", cls: "moderate",
+    pm25: "36 µg", pm10: "62 µg", wind: "8.1 km/h", humidity: "74%",
+    wards: [
+      { name:"Peenya Industrial", sub:"North Bangalore", aqi:142, cls:"moderate", src:"Industrial" },
+      { name:"Silk Board Jn.",    sub:"South Bangalore", aqi:128, cls:"moderate", src:"Vehicular" },
+      { name:"Hebbal",            sub:"North Bangalore", aqi:110, cls:"moderate", src:"Vehicular" },
+      { name:"Koramangala",       sub:"South Bangalore", aqi: 82, cls:"good",     src:"Mixed" },
+      { name:"Whitefield",        sub:"East Bangalore",  aqi: 75, cls:"good",     src:"Construction" },
+      { name:"Jayanagar",         sub:"South Bangalore", aqi: 62, cls:"good",     src:"Low" },
+      { name:"Indiranagar",       sub:"East Bangalore",  aqi: 58, cls:"good",     src:"Low" },
+      { name:"Yelahanka",         sub:"North Bangalore", aqi: 48, cls:"good",     src:"Low" },
+    ],
+    sources: [
+      { name:"Vehicular Exhaust", pct:48, color:"#f4813b" },
+      { name:"Construction Dust", pct:22, color:"#f2c94c" },
+      { name:"Industrial Emiss.", pct:18, color:"#e84545" },
+      { name:"Biomass Burning",   pct: 8, color:"#7c6fff" },
+      { name:"Other",             pct: 4, color:"#4a7a90" },
+    ],
+    pollutants: [
+      { name:"PM2.5", val:"36",  unit:"µg/m³", pct:29, color:"#f2c94c" },
+      { name:"PM10",  val:"62",  unit:"µg/m³", pct:25, color:"#f2c94c" },
+      { name:"NO₂",   val:"28",  unit:"ppb",   pct:19, color:"#27ae60" },
+      { name:"SO₂",   val:"12",  unit:"ppb",   pct:15, color:"#00c4a7" },
+      { name:"CO",    val:"0.6", unit:"ppm",   pct:12, color:"#00c4a7" },
+      { name:"O₃",    val:"35",  unit:"ppb",   pct:35, color:"#27ae60" },
+    ],
+    forecast: [80,75,70,68,65,62,60,58,56,55,58,62,68,72,78,82,88,92,95,90,85,82,80,78],
+    alerts: [
+      { type:"info", icon:"ℹ️", title:"Traffic Hotspot Detected", text:"Elevated NO₂ near Silk Board junction. Vehicular congestion identified as source.", time:"12 mins ago" },
+    ],
+    policies: [
+      "Deploy traffic police for signal optimization at Silk Board & Hebbal junctions",
+      "Issue advisory to Peenya industrial zone for emission controls",
+    ]
+  },
+  kolkata: {
+    name: "Kolkata",
+    aqi: 155, label: "Poor", cls: "poor",
+    pm25: "76 µg", pm10: "128 µg", wind: "3.8 km/h", humidity: "79%",
+    wards: [
+      { name:"Garden Reach",     sub:"South Kolkata", aqi:228, cls:"hazardous", src:"Industrial+Vehicular" },
+      { name:"Cossipore",        sub:"North Kolkata", aqi:195, cls:"poor",      src:"Biomass Burning" },
+      { name:"Dum Dum",          sub:"North Kolkata", aqi:172, cls:"poor",      src:"Industrial" },
+      { name:"Behala",           sub:"South Kolkata", aqi:152, cls:"poor",      src:"Construction" },
+      { name:"Park Street",      sub:"Central",       aqi:118, cls:"moderate",  src:"Vehicular" },
+      { name:"Salt Lake Sec-V",  sub:"East Kolkata",  aqi: 92, cls:"moderate",  src:"Mixed" },
+      { name:"New Town Rajarhat",sub:"East Kolkata",  aqi: 68, cls:"good",      src:"Low" },
+      { name:"Jodhpur Park",     sub:"South Kolkata", aqi: 80, cls:"good",      src:"Low" },
+    ],
+    sources: [
+      { name:"Biomass Burning",   pct:35, color:"#7c6fff" },
+      { name:"Vehicular Exhaust", pct:28, color:"#f4813b" },
+      { name:"Industrial Emiss.", pct:24, color:"#e84545" },
+      { name:"Construction Dust", pct: 9, color:"#f2c94c" },
+      { name:"Other",             pct: 4, color:"#4a7a90" },
+    ],
+    pollutants: [
+      { name:"PM2.5", val:"76",  unit:"µg/m³", pct:61, color:"#e84545" },
+      { name:"PM10",  val:"128", unit:"µg/m³", pct:51, color:"#f4813b" },
+      { name:"NO₂",   val:"62",  unit:"ppb",   pct:41, color:"#f2c94c" },
+      { name:"SO₂",   val:"32",  unit:"ppb",   pct:40, color:"#7c6fff" },
+      { name:"CO",    val:"1.4", unit:"ppm",   pct:28, color:"#00c4a7" },
+      { name:"O₃",    val:"40",  unit:"ppb",   pct:40, color:"#27ae60" },
+    ],
+    forecast: [165,175,185,195,210,220,215,200,185,172,162,155,148,142,138,135,140,148,155,165,178,188,195,200],
+    alerts: [
+      { type:"danger", icon:"🚨", title:"Hazard — Garden Reach Ward", text:"AQI 228. Port and industrial activity spiking emissions. School advisory issued.", time:"5 mins ago" },
+      { type:"warn", icon:"⚠️", title:"Biomass Burning Detected", text:"ML flagged crop/waste burning in Cossipore sector. Enforcement required.", time:"32 mins ago" },
+    ],
+    policies: [
+      "Issue enforcement notice to Garden Reach industrial cluster",
+      "Deploy teams to identify and stop biomass burning in Cossipore",
+      "Issue health advisory for wards with AQI > 200",
+      "Coordinate with KMC for water-sprinkling in dust hotspots",
+    ]
+  }
+};
+
+let currentCity = 'delhi';
+let activeWard = null;
+let currentLayer = 'aqi';
+let mapWards = [];
+const AQI_COLORS = { good:'#27ae60', moderate:'#f2c94c', poor:'#f4813b', hazardous:'#e84545' };
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+function init() {
+  updateTime();
+  setInterval(updateTime, 1000);
+  setInterval(tickLiveData, 4000);
+  renderAll();
+  setTimeout(drawMap, 100);
+}
+
+function updateTime() {
+  const now = new Date();
+  document.getElementById('mapTime').textContent =
+    `Updated: ${now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'})} IST`;
+}
+
+function renderAll() {
+  const d = CITIES[currentCity];
+  // Header
+  document.getElementById('cityName').textContent = d.name;
+  document.getElementById('mainAqi').textContent = d.aqi;
+  document.getElementById('mainAqi').className = `aqi-number ${d.cls}`;
+  document.getElementById('mainLabel').textContent = d.label;
+  document.getElementById('mainLabel').className = `aqi-label ${d.cls}`;
+  document.getElementById('pm25').textContent = d.pm25;
+  document.getElementById('pm10').textContent = d.pm10;
+  document.getElementById('wind').textContent = d.wind;
+  document.getElementById('humidity').textContent = d.humidity;
+
+  renderWards(d);
+  renderSources(d);
+  renderPollutants(d);
+  renderForecast(d);
+  renderAlerts(d);
+  renderPolicies(d);
+  drawMap();
+}
+
+function renderWards(d) {
+  const el = document.getElementById('wardList');
+  el.innerHTML = d.wards.map((w, i) => `
+    <div class="ward-item ${activeWard===i?'active':''}" onclick="selectWard(${i})">
+      <div class="ward-left">
+        <div class="ward-dot" style="background:${AQI_COLORS[w.cls]}"></div>
+        <div>
+          <div class="ward-name">${w.name}</div>
+          <div class="ward-sub">${w.sub}</div>
+        </div>
+      </div>
+      <div class="ward-aqi" style="color:${AQI_COLORS[w.cls]}">${w.aqi}</div>
+    </div>
+  `).join('');
+}
+
+function renderSources(d) {
+  document.getElementById('sourceBars').innerHTML = d.sources.map(s => `
+    <div class="source-bar-row">
+      <div class="source-bar-header">
+        <span class="source-bar-name">${s.name}</span>
+        <span class="source-bar-pct">${s.pct}%</span>
+      </div>
+      <div class="source-bar-track">
+        <div class="source-bar-fill" style="width:${s.pct}%;background:${s.color}"></div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPollutants(d) {
+  document.getElementById('pollutantGrid').innerHTML = d.pollutants.map(p => `
+    <div class="pollutant-item">
+      <div class="pollutant-name">${p.name}</div>
+      <div class="pollutant-value" style="color:${p.color}">${p.val} <span class="pollutant-unit">${p.unit}</span></div>
+      <div class="pollutant-bar"><div class="pollutant-bar-fill" style="width:${p.pct}%;background:${p.color}"></div></div>
+    </div>
+  `).join('');
+}
+
+function renderForecast(d) {
+  const max = Math.max(...d.forecast);
+  const hours = d.forecast.map((v, i) => {
+    const h = (new Date().getHours() + i) % 24;
+    return { v, h };
+  });
+  const step = 3;
+  document.getElementById('forecastChart').innerHTML = hours.map(({v}) => {
+    const ht = Math.max(4, Math.round((v/max)*65));
+    const cls = v>200?'#e84545':v>150?'#f4813b':v>100?'#f2c94c':'#27ae60';
+    return `<div class="mini-bar" style="height:${ht}px;background:${cls}" title="AQI ${v}"></div>`;
+  }).join('');
+  document.getElementById('chartLabels').innerHTML = hours.filter((_,i)=>i%step===0).map(({h})=>`<div class="chart-label" style="flex:${step}">${h}:00</div>`).join('');
+}
+
+function renderAlerts(d) {
+  document.getElementById('alertsList').innerHTML = d.alerts.map(a => `
+    <div class="alert-item">
+      <div class="alert-icon ${a.type}">${a.icon}</div>
+      <div class="alert-text">
+        <strong>${a.title}</strong>
+        ${a.text}
+        <div class="alert-time">${a.time}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function renderPolicies(d) {
+  document.getElementById('policyList').innerHTML = d.policies.map(p => `
+    <div class="policy-item"><div class="policy-dot"></div>${p}</div>
+  `).join('');
+}
+
+// ─── MAP ──────────────────────────────────────────────────────────────────────
+function drawMap() {
+  const canvas = document.getElementById('mapCanvas');
+  const container = document.getElementById('wardMap');
+  canvas.width = container.offsetWidth;
+  canvas.height = container.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Grid background
+  ctx.strokeStyle = 'rgba(26,58,74,0.3)';
+  ctx.lineWidth = 0.5;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  const d = CITIES[currentCity];
+  mapWards = [];
+
+  // Generate irregular ward shapes
+  const wardCount = d.wards.length;
+  const cols = Math.ceil(Math.sqrt(wardCount * 1.5));
+  const rows = Math.ceil(wardCount / cols);
+  const cellW = (W - 80) / cols;
+  const cellH = (H - 60) / rows;
+
+  d.wards.forEach((ward, i) => {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const cx = 40 + col * cellW + cellW/2;
+    const cy = 30 + row * cellH + cellH/2;
+    const rx = cellW * 0.38;
+    const ry = cellH * 0.38;
+
+    // Irregular polygon
+    const pts = 7;
+    const points = [];
+    for(let p=0;p<pts;p++){
+      const angle = (p/pts) * Math.PI * 2 - Math.PI/2;
+      const jitter = 0.7 + Math.random()*0.55;
+      points.push({
+        x: cx + Math.cos(angle)*rx*jitter,
+        y: cy + Math.sin(angle)*ry*jitter
+      });
+    }
+
+    // Glow
+    const color = AQI_COLORS[ward.cls];
+    const grd = ctx.createRadialGradient(cx,cy,0,cx,cy,Math.max(rx,ry)*1.2);
+    grd.addColorStop(0, color+'55');
+    grd.addColorStop(1, color+'00');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(cx,cy,Math.max(rx,ry)*1.4,0,Math.PI*2);
+    ctx.fill();
+
+    // Fill
+    ctx.beginPath();
+    ctx.moveTo(points[0].x, points[0].y);
+    for(let p=1;p<pts;p++) ctx.lineTo(points[p].x, points[p].y);
+    ctx.closePath();
+
+    if(activeWard===i){
+      ctx.fillStyle = color+'cc';
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2.5;
+    } else {
+      ctx.fillStyle = color+'66';
+      ctx.strokeStyle = color+'aa';
+      ctx.lineWidth = 1.5;
+    }
+    ctx.fill();
+    ctx.stroke();
+
+    // AQI text
+    ctx.fillStyle = '#fff';
+    ctx.font = `bold 16px 'Syne', sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(ward.aqi, cx, cy-8);
+
+    ctx.font = `10px 'DM Sans', sans-serif`;
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    const shortName = ward.name.length>14 ? ward.name.slice(0,13)+'…' : ward.name;
+    ctx.fillText(shortName, cx, cy+9);
+
+    mapWards.push({ cx, cy, rx: rx*1.1, ry: ry*1.1, ward, index: i, points });
+  });
+}
+
+// ─── INTERACTIONS ──────────────────────────────────────────────────────────────
+const canvas = document.getElementById('mapCanvas');
+const tooltip = document.getElementById('tooltip');
+
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  let hit = null;
+
+  for(const w of mapWards){
+    if(Math.pow((mx-w.cx)/w.rx,2)+Math.pow((my-w.cy)/w.ry,2) < 1){ hit=w; break; }
+  }
+
+  if(hit){
+    const ward = hit.ward;
+    document.getElementById('tt-name').textContent = ward.name;
+    document.getElementById('tt-aqi').textContent = ward.aqi;
+    document.getElementById('tt-aqi').style.color = AQI_COLORS[ward.cls];
+    document.getElementById('tt-pm25').textContent = `~${Math.round(ward.aqi*0.5)} µg/m³`;
+    document.getElementById('tt-src').textContent = ward.src;
+    document.getElementById('tt-status').textContent = ward.cls.charAt(0).toUpperCase()+ward.cls.slice(1);
+    document.getElementById('tt-status').style.color = AQI_COLORS[ward.cls];
+
+    let tx = e.clientX - rect.left + 12;
+    let ty = e.clientY - rect.top + 12;
+    if(tx+160>canvas.width) tx -= 170;
+    if(ty+130>canvas.height) ty -= 140;
+    tooltip.style.left = tx+'px';
+    tooltip.style.top = ty+'px';
+    tooltip.classList.add('show');
+    canvas.style.cursor = 'pointer';
+  } else {
+    tooltip.classList.remove('show');
+    canvas.style.cursor = 'default';
+  }
+});
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  for(const w of mapWards){
+    if(Math.pow((mx-w.cx)/w.rx,2)+Math.pow((my-w.cy)/w.ry,2) < 1){
+      selectWard(w.index);
+      return;
+    }
+  }
+});
+
+canvas.addEventListener('mouseleave', () => tooltip.classList.remove('show'));
+
+function selectWard(i) {
+  activeWard = activeWard === i ? null : i;
+  renderWards(CITIES[currentCity]);
+  drawMap();
+}
+
+function changeCity(city) {
+  currentCity = city;
+  activeWard = null;
+  renderAll();
+}
+
+function setLayer(btn, layer) {
+  document.querySelectorAll('.ctrl-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  currentLayer = layer;
+  drawMap();
+}
+
+function switchTab(btn, tab) {
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ─── LIVE DATA TICKER ─────────────────────────────────────────────────────────
+function tickLiveData() {
+  const d = CITIES[currentCity];
+  // Slightly randomise AQI values for realism
+  d.wards.forEach(w => {
+    w.aqi = Math.max(30, w.aqi + (Math.random()-0.5)*8|0);
+  });
+  d.aqi = Math.round(d.wards.reduce((s,w)=>s+w.aqi,0)/d.wards.length);
+  renderWards(d);
+  document.getElementById('mainAqi').textContent = d.aqi;
+  drawMap();
+}
+
+window.addEventListener('resize', drawMap);
+window.addEventListener('load', init);
+</script>
+</body>
+</html>
